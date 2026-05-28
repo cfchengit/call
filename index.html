@@ -1,0 +1,614 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>教室座位表 — IP 出席對照</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+/* ════ 主題變數（同 seating-chart_2.html）════ */
+:root{
+  --bg:#f4f6fb; --surface:#fff; --border:#dde3f0;
+  --empty:#eaecf5; --empty-txt:#b8bcd4;
+  --ok-bg:#e8f3ff; --ok-border:#3b82f6;
+  --dupe-bg:#fff0f0; --dupe-border:#ef4444;
+  --out-bg:#fff8ed; --out-border:#f59e0b;
+  --font:'Noto Sans TC',system-ui,sans-serif;
+  --mono:'Courier New',monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:var(--font);background:var(--bg);color:#1a1a2e;min-height:100vh;padding:16px;}
+
+/* ── 上傳頁 ── */
+.upload-page{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:80vh;gap:20px;}
+.upload-card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:40px 48px;text-align:center;max-width:520px;width:100%;}
+.upload-title{font-size:22px;font-weight:700;margin-bottom:8px;}
+.upload-sub{font-size:13px;color:#666;margin-bottom:28px;line-height:1.6;}
+.drop-zone{
+  border:2px dashed var(--border);border-radius:12px;padding:36px 24px;
+  cursor:pointer;transition:all .2s;background:#f8f9fd;
+}
+.drop-zone.drag-over{border-color:var(--ok-border);background:var(--ok-bg);}
+.drop-zone:hover{border-color:#93c5fd;}
+.drop-icon{font-size:40px;margin-bottom:12px;display:block;}
+.drop-text{font-size:14px;font-weight:500;margin-bottom:4px;}
+.drop-hint{font-size:12px;color:#94a3b8;}
+.file-input{display:none;}
+.upload-btn{
+  margin-top:14px;padding:10px 24px;
+  background:var(--ok-border);border:none;border-radius:8px;color:#fff;
+  font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;
+}
+.format-info{margin-top:20px;padding:14px 16px;background:#f8f9fd;border:1px solid var(--border);border-radius:10px;text-align:left;}
+.format-title{font-size:10px;letter-spacing:2px;color:#94a3b8;text-transform:uppercase;margin-bottom:8px;}
+.format-tags{display:flex;flex-wrap:wrap;gap:6px;}
+.ftag{padding:2px 10px;border-radius:20px;font-size:11px;font-family:var(--mono);}
+.ftag-info{background:#eff6ff;border:1px solid #bfdbfe;color:#1d4ed8;}
+.ftag-date{background:#f0fdf4;border:1px solid #86efac;color:#16a34a;}
+.ftag-stat{background:#fefce8;border:1px solid #fde047;color:#854d0e;}
+.err-box{background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;padding:10px 14px;color:#b91c1c;font-size:12px;margin-top:12px;}
+
+/* ── 儀表板 ── */
+.hdr{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px 20px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;}
+.hdr-left h1{font-size:18px;font-weight:700;margin-bottom:5px;}
+.hdr-meta{font-size:12px;color:#666;display:flex;flex-wrap:wrap;gap:8px;}
+.tag{background:#eff6ff;border:1px solid #bfdbfe;border-radius:20px;padding:2px 10px;font-size:11px;color:#1d4ed8;}
+.reset-btn{padding:6px 14px;border:1.5px solid var(--border);border-radius:8px;background:none;color:#555;cursor:pointer;font-size:12px;font-family:inherit;white-space:nowrap;}
+.reset-btn:hover{border-color:var(--ok-border);color:var(--ok-border);}
+
+/* ── KPI ── */
+.kpi-row{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;}
+.kpi{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:10px 16px;min-width:90px;text-align:center;}
+.kpi-n{font-size:24px;font-weight:700;font-family:var(--mono);}
+.kpi-l{font-size:10px;color:#888;margin-top:2px;}
+
+/* ── 警示面板 ── */
+.panels{display:flex;flex-direction:column;gap:10px;margin-bottom:14px;}
+.panel{border-radius:10px;padding:12px 14px;}
+.panel-dupe{background:var(--dupe-bg);border:1.5px solid var(--dupe-border);}
+.panel-out {background:var(--out-bg); border:1.5px solid var(--out-border);}
+.panel-ok  {background:#f0fdf4;border:1px solid #86efac;}
+.panel-title{font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:8px;}
+.panel-dupe .panel-title{color:var(--dupe-border);}
+.panel-out  .panel-title{color:var(--out-border);}
+.panel-ok   .panel-title{color:#16a34a;}
+.chip-list{display:flex;flex-wrap:wrap;gap:8px;}
+.chip{border-radius:8px;padding:6px 12px;font-size:12px;line-height:1.7;border:1px solid;}
+.chip-dupe{background:#fff;border-color:var(--dupe-border);}
+.chip-out {background:#fff;border-color:var(--out-border);}
+.chip b{font-family:var(--mono);}
+
+/* ── 圖例 ── */
+.legend{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:14px;font-size:12px;color:#555;padding:8px 14px;background:var(--surface);border:1px solid var(--border);border-radius:8px;align-items:center;}
+.leg{display:flex;align-items:center;gap:6px;}
+.lbox{width:18px;height:13px;border-radius:3px;border:1.5px solid;}
+.lbox-e{background:var(--empty);border-color:#c5cde0;}
+.lbox-o{background:var(--ok-bg);border-color:var(--ok-border);}
+.lbox-d{background:var(--dupe-bg);border-color:var(--dupe-border);}
+.lbox-x{background:var(--out-bg);border-color:var(--out-border);}
+
+/* ── 篩選列 ── */
+.fbar{display:flex;gap:7px;flex-wrap:wrap;align-items:center;margin-bottom:14px;}
+.fbtn{padding:5px 13px;border-radius:20px;border:1.5px solid var(--border);background:var(--surface);color:#555;cursor:pointer;font-size:12px;font-family:inherit;transition:all .15s;}
+.fbtn:hover{border-color:#93c5fd;}
+.fbtn.act-all  {background:#3b82f6;border-color:#3b82f6;color:#fff;}
+.fbtn.act-ok   {background:#16a34a;border-color:#16a34a;color:#fff;}
+.fbtn.act-dupe {background:var(--dupe-border);border-color:var(--dupe-border);color:#fff;}
+.fbtn.act-out  {background:#f59e0b;border-color:#f59e0b;color:#fff;}
+.fcnt{font-size:11px;color:#888;margin-left:auto;}
+
+/* ── 教室主體 ── */
+.room-wrap{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:18px;overflow-x:auto;margin-bottom:16px;}
+.row-label{font-size:9px;color:#aaa;letter-spacing:1.5px;text-align:center;margin-bottom:4px;text-transform:uppercase;}
+.seat-row{display:flex;align-items:stretch;justify-content:center;gap:5px;margin-bottom:6px;}
+.gap-col{width:20px;flex-shrink:0;display:flex;align-items:center;justify-content:center;}
+.gap-line{width:1px;height:100%;background:#dde3f0;margin:0 auto;}
+
+/* ── 座位格 ── */
+.seat{
+  width:82px;min-height:72px;border-radius:7px;border:1.5px solid transparent;
+  padding:5px 6px;display:flex;flex-direction:column;
+  position:relative;cursor:default;flex-shrink:0;
+  transition:transform .12s,box-shadow .12s;
+}
+.seat:hover{transform:translateY(-2px);box-shadow:0 5px 14px rgba(0,0,0,.1);}
+.seat.empty{background:var(--empty);border-color:#c5cde0;}
+.seat.ok   {background:var(--ok-bg);border-color:var(--ok-border);}
+.seat.dupe {background:var(--dupe-bg);border:2.5px solid var(--dupe-border);box-shadow:0 0 0 2px rgba(239,68,68,.15);}
+.seat.outip{background:var(--out-bg);border-color:var(--out-border);}
+.seat.spacer{background:transparent;border-color:transparent;pointer-events:none;}
+
+.sn{font-size:11px;font-weight:700;font-family:var(--mono);margin-bottom:3px;}
+.seat.empty .sn{color:var(--empty-txt);}
+.seat.ok    .sn{color:#1d4ed8;}
+.seat.dupe  .sn{color:#dc2626;}
+.seat.outip .sn{color:#b45309;}
+
+.sbadge{position:absolute;top:3px;right:4px;font-size:8px;font-weight:700;padding:1px 5px;border-radius:8px;}
+.sbadge-d{background:#ef4444;color:#fff;}
+.sbadge-x{background:#f59e0b;color:#fff;}
+
+.entry{border-top:1px solid rgba(0,0,0,.07);padding-top:2px;margin-top:2px;}
+.entry:first-of-type{border-top:none;margin-top:0;padding-top:0;}
+.e-acc{font-size:10px;font-family:var(--mono);color:#1e3a8a;line-height:1.3;word-break:break-all;}
+.seat.dupe .e-acc{color:#b91c1c;}
+.e-time{font-size:9px;color:#94a3b8;font-family:var(--mono);}
+
+/* ── Tooltip ── */
+.tt-wrap{position:relative;}
+.tt-wrap:hover .tt{display:block;}
+.tt{
+  display:none;position:absolute;z-index:300;
+  bottom:calc(100% + 8px);left:50%;transform:translateX(-50%);
+  background:#1e293b;color:#e2e8f0;border-radius:9px;padding:10px 14px;
+  font-size:12px;line-height:1.8;white-space:nowrap;min-width:200px;
+  box-shadow:0 8px 24px rgba(0,0,0,.3);pointer-events:none;
+}
+.tt::after{content:'';position:absolute;top:100%;left:50%;transform:translateX(-50%);border:6px solid transparent;border-top-color:#1e293b;}
+.tt-hd{font-weight:700;color:#60a5fa;border-bottom:1px solid #334155;padding-bottom:4px;margin-bottom:4px;}
+.tt-row{color:#cbd5e1;}
+.tt-row span{color:#e2e8f0;font-weight:500;}
+.tt-sep{border:none;border-top:1px solid #334155;margin:4px 0;}
+
+/* ── 講台 ── */
+.podium{text-align:center;margin-top:14px;}
+.podium-bar{display:inline-block;background:#374151;color:#fff;border-radius:8px;padding:8px 64px;font-size:13px;font-weight:600;letter-spacing:3px;}
+</style>
+</head>
+<body>
+
+<!-- ════ 上傳頁（初始顯示）════ -->
+<div id="uploadPage">
+  <div class="upload-page">
+    <div class="upload-card">
+      <div class="upload-title">📊 教室座位出席對照</div>
+      <div class="upload-sub">
+        上傳 Moodle 匯出的回覆紀錄 Excel 檔案<br>
+        系統自動解析 IP，對應座位表並標示異常
+      </div>
+
+      <label class="drop-zone" id="dropZone">
+        <span class="drop-icon" id="dropIcon">📂</span>
+        <div class="drop-text" id="dropText">點擊選擇或拖曳 Excel 檔案</div>
+        <div class="drop-hint">支援 .xlsx / .xls 格式</div>
+        <input type="file" class="file-input" id="fileInput" accept=".xlsx,.xls">
+      </label>
+      <button class="upload-btn" onclick="document.getElementById('fileInput').click()">選擇檔案</button>
+      <div class="err-box" id="errBox" style="display:none"></div>
+
+      <div class="format-info">
+        <div class="format-title">Excel 工作表格式（「回覆紀錄」工作表）</div>
+        <div class="format-tags">
+          <span class="ftag ftag-info">D欄：標題（IP如163.13.179.134）</span>
+          <span class="ftag ftag-info">E欄：建立時間</span>
+          <span class="ftag ftag-info">G欄：姓名</span>
+          <span class="ftag ftag-info">H欄：帳號</span>
+          <span class="ftag ftag-date">IP範圍：163.13.179.101～174（跳過131）</span>
+          <span class="ftag ftag-stat">超出範圍視為非教室 IP</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════ 儀表板（載入後顯示）════ -->
+<div id="dashboard" style="display:none">
+
+  <!-- Header -->
+  <div class="hdr">
+    <div class="hdr-left">
+      <h1>教室座位表 — IP 出席對照</h1>
+      <div class="hdr-meta">
+        <span class="tag" id="tagSheet">回覆紀錄</span>
+        <span class="tag">163.13.179.XXX → 座位 XXX</span>
+        <span class="tag" id="tagTime"></span>
+        <span class="tag" id="tagFile"></span>
+      </div>
+    </div>
+    <button class="reset-btn" onclick="resetPage()">← 重新上傳</button>
+  </div>
+
+  <!-- KPI -->
+  <div class="kpi-row">
+    <div class="kpi"><div class="kpi-n" id="kpiTotal" style="color:#3b82f6">0</div><div class="kpi-l">回答筆數</div></div>
+    <div class="kpi"><div class="kpi-n" id="kpiOk"    style="color:#16a34a">0</div><div class="kpi-l">有效座位</div></div>
+    <div class="kpi"><div class="kpi-n" id="kpiDupe"  style="color:#ef4444">0</div><div class="kpi-l">IP重複座位</div></div>
+    <div class="kpi"><div class="kpi-n" id="kpiOut"   style="color:#f59e0b">0</div><div class="kpi-l">非教室IP</div></div>
+    <div class="kpi"><div class="kpi-n" id="kpiEmpty" style="color:#94a3b8">0</div><div class="kpi-l">未回答座位</div></div>
+  </div>
+
+  <!-- 警示面板 -->
+  <div class="panels" id="panels"></div>
+
+  <!-- 圖例 + 篩選 -->
+  <div class="legend">
+    <div class="leg"><div class="lbox lbox-e"></div>未回答</div>
+    <div class="leg"><div class="lbox lbox-o"></div>已回答（教室IP）</div>
+    <div class="leg"><div class="lbox lbox-d"></div>IP重複（紅框）</div>
+    <div class="leg"><div class="lbox lbox-x"></div>非教室IP（橘框）</div>
+    <div style="margin-left:auto;font-size:11px;color:#aaa">滑鼠懸停座位可查看詳情</div>
+  </div>
+
+  <div class="fbar">
+    <button class="fbtn act-all" id="btnAll"   onclick="applyFilter('all',this)">全部</button>
+    <button class="fbtn"         id="btnOk"    onclick="applyFilter('ok',this)">已回答</button>
+    <button class="fbtn"         id="btnDupe"  onclick="applyFilter('dupe',this)">IP重複</button>
+    <button class="fbtn"         id="btnOut"   onclick="applyFilter('out',this)">非教室IP</button>
+    <span class="fcnt" id="fcnt"></span>
+  </div>
+
+  <!-- 教室座位圖 -->
+  <div class="room-wrap" id="room"></div>
+</div>
+
+<script>
+/* ═══════════════════════════════════════════════
+   座位配置（完全依照 index.htm 的 rowLayouts & 計算邏輯）
+   每排從左至右：G3(左區) | aisle | G2(中區) | aisle | G1(右區)
+   null = 視覺空格（置中用）
+   ═══════════════════════════════════════════════ */
+const SEAT_ROWS = [
+  // Row 4（頂/後方，HTML 最先渲染）
+  { label:"第5排（後）",
+    left:  [174,173,172,171],
+    mid:   [null,170,169,168,167,166,165,null],
+    right: [164,163,162,161] },
+  // Row 3
+  { label:"第4排",
+    left:  [160,159,158,157],
+    mid:   [null,156,155,154,153,152,151,null],
+    right: [150,149,148,147] },
+  // Row 2（IP 131 跳過，從 132 開始）
+  { label:"第3排",
+    left:  [146,145,144,143],
+    mid:   [null,142,141,140,139,138,137,136],
+    right: [135,134,133,132] },
+  // Row 1
+  { label:"第2排",
+    left:  [130,129,128,127],
+    mid:   [null,126,125,124,123,122,121,120],
+    right: [119,118,117,116] },
+  // Row 0（底/前方，靠講台）
+  { label:"第1排（前）",
+    left:  [115,114,113,null],
+    mid:   [112,111,110,109,108,107,106,105],
+    right: [104,103,102,101] },
+];
+
+// 有效座位範圍（101~174，跳過131）
+const VALID_SEATS = new Set(
+  Array.from({length:74}, (_,i) => 101+i).filter(n => n !== 131)
+);
+const TOTAL_SEATS = VALID_SEATS.size; // 73
+
+/* ═══════════════════════════════════
+   全域狀態
+   ═══════════════════════════════════ */
+let STATE = { seatData:{}, nonConforming:[], duplicates:[] };
+
+/* ═══════════════════════════════════
+   Excel 上傳與拖曳
+   ═══════════════════════════════════ */
+const dropZone  = document.getElementById('dropZone');
+const fileInput = document.getElementById('fileInput');
+const errBox    = document.getElementById('errBox');
+
+dropZone.addEventListener('dragover',  e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault(); dropZone.classList.remove('drag-over');
+  if (e.dataTransfer.files[0]) processFile(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener('change', e => {
+  if (e.target.files[0]) processFile(e.target.files[0]);
+  fileInput.value = '';
+});
+
+function showErr(msg) {
+  errBox.textContent = '❌ ' + msg;
+  errBox.style.display = 'block';
+  document.getElementById('dropIcon').textContent = '⚠️';
+  document.getElementById('dropText').textContent = '請重新選擇檔案';
+}
+
+/* ═══════════════════════════════════
+   檔案解析
+   ═══════════════════════════════════ */
+function processFile(file) {
+  errBox.style.display = 'none';
+  document.getElementById('dropIcon').textContent = '⏳';
+  document.getElementById('dropText').textContent = '解析中...';
+
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const wb = XLSX.read(e.target.result, {type:'array'});
+
+      // 找「回覆紀錄」工作表
+      const sheetName = wb.SheetNames.find(n => n.includes('回覆')) || wb.SheetNames[0];
+      if (!sheetName) throw new Error('找不到「回覆紀錄」工作表');
+
+      const ws = wb.Sheets[sheetName];
+      // header:1 → 2D array；defval:'' 避免 undefined
+      const rows = XLSX.utils.sheet_to_json(ws, {header:1, defval:''});
+      if (rows.length < 2) throw new Error('工作表資料不足（需至少 2 列）');
+
+      // 驗證標頭
+      const hdr = rows[0].map(h => String(h).trim());
+      const has = name => hdr.some(h => h.includes(name));
+      if (!has('標題') && !has('帳號')) throw new Error('找不到「標題」或「帳號」欄位，請確認工作表格式');
+
+      // 動態找欄位索引
+      const colTitle = hdr.findIndex(h => h.includes('標題'));
+      const colTime  = hdr.findIndex(h => h.includes('建立'));
+      const colName  = hdr.findIndex(h => h.includes('姓名'));
+      const colAcct  = hdr.findIndex(h => h.includes('帳號'));
+
+      // Fallback to position-based (index.htm style)
+      const cTitle = colTitle >= 0 ? colTitle : 3;
+      const cTime  = colTime  >= 0 ? colTime  : 4;
+      const cName  = colName  >= 0 ? colName  : 6;
+      const cAcct  = colAcct  >= 0 ? colAcct  : 7;
+
+      // 解析資料
+      const dataRows = rows.slice(1).filter(r => r[0] !== '' && r[0] !== undefined);
+      STATE = parseData(dataRows, cTitle, cTime, cName, cAcct);
+
+      // 更新標籤
+      document.getElementById('tagFile').textContent  = file.name;
+      document.getElementById('tagSheet').textContent = sheetName;
+
+      // 找時間範圍
+      const times = Object.values(STATE.seatData).flatMap(d => d.entries.map(e => e.time))
+                          .concat(STATE.nonConforming.map(s=>s.time))
+                          .filter(Boolean).sort();
+      if (times.length) {
+        document.getElementById('tagTime').textContent = times[0] + (times.length>1 ? ' ～ '+times[times.length-1] : '');
+      }
+
+      renderDashboard();
+      document.getElementById('uploadPage').style.display = 'none';
+      document.getElementById('dashboard').style.display  = 'block';
+
+    } catch(err) {
+      showErr(err.message);
+    }
+  };
+  reader.onerror = () => showErr('檔案讀取失敗');
+  reader.readAsArrayBuffer(file);
+}
+
+/* ═══════════════════════════════════
+   資料解析（同 index.htm processData 邏輯）
+   ═══════════════════════════════════ */
+function parseData(rows, cTitle, cTime, cName, cAcct) {
+  const ipMap = {};  // ip_string → [student,...]
+
+  for (const row of rows) {
+    const ip   = String(row[cTitle] || '').trim();
+    const time = String(row[cTime]  || '').trim();
+    const name = String(row[cName]  || '').trim();
+    const acct = String(row[cAcct]  || '').trim();
+    if (!ip) continue;
+    if (!ipMap[ip]) ipMap[ip] = [];
+    ipMap[ip].push({ip, time, name, acct});
+  }
+
+  const seatData     = {};  // octet → {type,entries}
+  const nonConforming = [];  // 非教室IP
+  const duplicates    = [];  // IP重複
+
+  for (const [ip, students] of Object.entries(ipMap)) {
+    // 確認格式 163.13.179.XXX
+    const m = ip.match(/^163\.13\.179\.(\d+)$/);
+    if (!m) {
+      nonConforming.push(...students);
+      continue;
+    }
+    const octet = parseInt(m[1]);
+    // 確認在有效範圍內
+    if (!VALID_SEATS.has(octet)) {
+      // 範圍外（含131、<101、>174）
+      nonConforming.push(...students.map(s => ({...s, reason:`IP末段 ${octet} 超出範圍（101-174，跳過131）`})));
+      continue;
+    }
+
+    if (students.length > 1) {
+      // 同一 IP 多筆 → duplicate
+      duplicates.push({seat: octet, students});
+      seatData[octet] = {type:'dupe', entries: students};
+    } else {
+      seatData[octet] = {type:'ok', entries: students};
+    }
+  }
+
+  return {seatData, nonConforming, duplicates};
+}
+
+/* ═══════════════════════════════════
+   渲染儀表板
+   ═══════════════════════════════════ */
+function renderDashboard() {
+  const {seatData, nonConforming, duplicates} = STATE;
+
+  const nTotal  = Object.values(seatData).reduce((s,d)=>s+d.entries.length,0) + nonConforming.length;
+  const nOk     = Object.values(seatData).filter(d=>d.type==='ok').length;
+  const nDupe   = duplicates.length;
+  const nOut    = nonConforming.length;
+  const nEmpty  = TOTAL_SEATS - Object.keys(seatData).length;
+
+  document.getElementById('kpiTotal').textContent = nTotal;
+  document.getElementById('kpiOk')   .textContent = nOk;
+  document.getElementById('kpiDupe') .textContent = nDupe;
+  document.getElementById('kpiOut')  .textContent = nOut;
+  document.getElementById('kpiEmpty').textContent = nEmpty;
+
+  renderPanels(duplicates, nonConforming);
+  renderRoom();
+  applyFilter('all', document.getElementById('btnAll'));
+}
+
+function renderPanels(duplicates, nonConforming) {
+  const el = document.getElementById('panels');
+  let html = '';
+
+  // IP 重複
+  if (duplicates.length) {
+    html += `<div class="panel panel-dupe">
+      <div class="panel-title">⚠ IP 重複座位 — 同一 IP 多筆回答</div>
+      <div class="chip-list">`;
+    for (const d of duplicates) {
+      html += `<div class="chip chip-dupe">
+        <b>座位 ${d.seat}（163.13.179.${d.seat}）</b><br>`;
+      for (const s of d.students) {
+        html += `帳號：<b>${s.acct}</b>　姓名：${s.name}　${s.time}<br>`;
+      }
+      html += `<span style="color:var(--dupe-border);font-size:11px">⚠ 請確認是否為同學操作多次或共用電腦</span>
+      </div>`;
+    }
+    html += `</div></div>`;
+  }
+
+  // 非教室 IP
+  if (nonConforming.length) {
+    html += `<div class="panel panel-out">
+      <div class="panel-title">🌐 非教室 IP — 163.13.179.101-174 範圍以外</div>
+      <div class="chip-list">`;
+    for (const s of nonConforming) {
+      const reason = s.reason || `IP: ${s.ip}`;
+      html += `<div class="chip chip-out">
+        <b>${s.ip}</b><br>
+        帳號：<b>${s.acct}</b>　姓名：${s.name}<br>
+        <span style="font-size:10px;color:var(--out-border)">${reason}</span>
+      </div>`;
+    }
+    html += `</div></div>`;
+  }
+
+  // 全部正常
+  if (!duplicates.length && !nonConforming.length) {
+    html += `<div class="panel panel-ok">
+      <div class="panel-title">✅ 無異常</div>
+      <div style="font-size:12px;color:#16a34a">所有回答均為教室內有效 IP，無重複或範圍外紀錄。</div>
+    </div>`;
+  }
+
+  el.innerHTML = html;
+}
+
+/* ═══════════════════════════════════
+   渲染座位圖
+   ═══════════════════════════════════ */
+function renderRoom() {
+  const {seatData} = STATE;
+  const room = document.getElementById('room');
+  let html = '';
+
+  // 由上（後方）到下（前方）
+  for (const rowDef of SEAT_ROWS) {
+    html += `<div class="row-label">${rowDef.label}</div>
+             <div class="seat-row">`;
+    // 左區
+    for (const n of rowDef.left)  html += buildSeat(n, seatData);
+    // 走道
+    html += `<div class="gap-col"><div class="gap-line"></div></div>`;
+    // 中區
+    for (const n of rowDef.mid)   html += buildSeat(n, seatData);
+    // 走道
+    html += `<div class="gap-col"><div class="gap-line"></div></div>`;
+    // 右區
+    for (const n of rowDef.right) html += buildSeat(n, seatData);
+    html += `</div>`;
+  }
+
+  // 講台（下方）
+  html += `<div class="podium"><div class="podium-bar">📋 講　台（前方）</div></div>`;
+  room.innerHTML = html;
+}
+
+function buildSeat(num, seatData) {
+  // null = 視覺空格（置中用）
+  if (num === null) {
+    return `<div class="seat spacer"></div>`;
+  }
+
+  const info = seatData[num] || {type:'empty', entries:[]};
+  const cls  = info.type === 'dupe' ? 'dupe' : info.type === 'ok' ? 'ok' : 'empty';
+  const badge = info.type === 'dupe' ? `<div class="sbadge sbadge-d">重複</div>` : '';
+
+  // 座位內容：帳號 + 時間（不顯示姓名，姓名在 tooltip）
+  let entries = '';
+  for (const e of info.entries) {
+    entries += `<div class="entry">
+      <div class="e-acc">${e.acct}</div>
+      <div class="e-time">${e.time.length>11 ? e.time.slice(11) : e.time}</div>
+    </div>`;
+  }
+
+  // Tooltip
+  let tt = `<div class="tt-hd">座位 ${num}&nbsp;&nbsp;163.13.179.${num}</div>`;
+  if (!info.entries.length) {
+    tt += `<div class="tt-row" style="color:#64748b">尚未回答</div>`;
+  } else {
+    info.entries.forEach((e, i) => {
+      if (i > 0) tt += `<hr class="tt-sep">`;
+      tt += `<div class="tt-row">帳號：<span>${e.acct}</span></div>
+             <div class="tt-row">姓名：<span>${e.name}</span></div>
+             <div class="tt-row">時間：<span>${e.time}</span></div>`;
+    });
+    if (info.type === 'dupe')
+      tt += `<div class="tt-row" style="color:#fca5a5;margin-top:4px">⚠ 同一 IP 多筆回答</div>`;
+  }
+
+  return `<div class="seat ${cls} tt-wrap" data-type="${info.type}" data-num="${num}">
+    ${badge}
+    <div class="sn">${num}</div>
+    ${entries}
+    <div class="tt">${tt}</div>
+  </div>`;
+}
+
+/* ═══════════════════════════════════
+   篩選功能
+   ═══════════════════════════════════ */
+function applyFilter(mode, clickedBtn) {
+  // 移除所有 active class
+  ['btnAll','btnOk','btnDupe','btnOut'].forEach(id => {
+    const b = document.getElementById(id);
+    b.className = 'fbtn';
+  });
+  // 設定 active
+  const cls = {all:'act-all', ok:'act-ok', dupe:'act-dupe', out:'act-out'};
+  clickedBtn.classList.add(cls[mode]);
+
+  const seats = document.querySelectorAll('.seat[data-num]');
+  seats.forEach(el => {
+    const t = el.dataset.type;
+    let show = true;
+    if (mode === 'ok')   show = t === 'ok';
+    if (mode === 'dupe') show = t === 'dupe';
+    if (mode === 'out')  show = false; // outip seats handled in panel, not on map
+    el.style.visibility = show ? 'visible' : 'hidden';
+    el.style.opacity    = show ? '1' : '0';
+  });
+
+  // spacer 格永遠隱藏（不計算）
+  const total  = [...seats].length;
+  const shown  = [...seats].filter(e => e.style.visibility !== 'hidden').length;
+  document.getElementById('fcnt').textContent = `顯示：${shown} / ${total} 個座位`;
+}
+
+/* ═══════════════════════════════════
+   重置
+   ═══════════════════════════════════ */
+function resetPage() {
+  STATE = {seatData:{}, nonConforming:[], duplicates:[]};
+  document.getElementById('uploadPage').style.display = 'block';
+  document.getElementById('dashboard').style.display  = 'none';
+  document.getElementById('dropIcon').textContent = '📂';
+  document.getElementById('dropText').textContent = '點擊選擇或拖曳 Excel 檔案';
+  errBox.style.display = 'none';
+}
+</script>
+</body>
+</html>
