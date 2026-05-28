@@ -98,7 +98,19 @@ body{font-family:var(--font);background:var(--bg);color:#1a1a2e;min-height:100vh
 .fcnt{font-size:11px;color:#888;margin-left:auto;}
 
 /* ── 教室主體 ── */
-.room-wrap{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:18px;overflow-x:auto;margin-bottom:16px;}
+.room-wrap{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:90px 18px 18px;overflow-x:auto;margin-bottom:16px;}
+
+/* ── 最上排 tooltip 改為向下彈出（避免被截斷）── */
+.seat[data-top="1"] .tt{
+  bottom:auto;
+  top:calc(100% + 8px);
+}
+.seat[data-top="1"] .tt::after{
+  top:auto;
+  bottom:100%;
+  border-top-color:transparent;
+  border-bottom-color:#1e293b;
+}
 .row-label{font-size:9px;color:#aaa;letter-spacing:1.5px;text-align:center;margin-bottom:4px;text-transform:uppercase;}
 .seat-row{display:flex;align-items:stretch;justify-content:center;gap:5px;margin-bottom:6px;}
 .gap-col{width:20px;flex-shrink:0;display:flex;align-items:center;justify-content:center;}
@@ -111,7 +123,8 @@ body{font-family:var(--font);background:var(--bg);color:#1a1a2e;min-height:100vh
   position:relative;cursor:default;flex-shrink:0;
   transition:transform .12s,box-shadow .12s;
 }
-.seat:hover{transform:translateY(-2px);box-shadow:0 5px 14px rgba(0,0,0,.1);}
+.seat:hover{transform:translateY(-2px);box-shadow:0 5px 14px rgba(0,0,0,.1);z-index:500;position:relative;}
+.seat[data-top="1"]:hover{transform:translateY(2px);}  /* 向下彈出時改往下微移 */
 .seat.empty{background:var(--empty);border-color:#c5cde0;}
 .seat.ok   {background:var(--ok-bg);border-color:var(--ok-border);}
 .seat.dupe {background:var(--dupe-bg);border:2.5px solid var(--dupe-border);box-shadow:0 0 0 2px rgba(239,68,68,.15);}
@@ -138,7 +151,7 @@ body{font-family:var(--font);background:var(--bg);color:#1a1a2e;min-height:100vh
 .tt-wrap{position:relative;}
 .tt-wrap:hover .tt{display:block;}
 .tt{
-  display:none;position:absolute;z-index:300;
+  display:none;position:absolute;z-index:9999;
   bottom:calc(100% + 8px);left:50%;transform:translateX(-50%);
   background:#1e293b;color:#e2e8f0;border-radius:9px;padding:10px 14px;
   font-size:12px;line-height:1.8;white-space:nowrap;min-width:200px;
@@ -505,19 +518,16 @@ function renderRoom() {
   let html = '';
 
   // 由上（後方）到下（前方）
-  for (const rowDef of SEAT_ROWS) {
+  for (let rowIdx = 0; rowIdx < SEAT_ROWS.length; rowIdx++) {
+    const rowDef = SEAT_ROWS[rowIdx];
+    const isTop = rowIdx === 0; // 最上排（第5排）tooltip 向下
     html += `<div class="row-label">${rowDef.label}</div>
              <div class="seat-row">`;
-    // 左區
-    for (const n of rowDef.left)  html += buildSeat(n, seatData);
-    // 走道
+    for (const n of rowDef.left)  html += buildSeat(n, seatData, isTop);
     html += `<div class="gap-col"><div class="gap-line"></div></div>`;
-    // 中區
-    for (const n of rowDef.mid)   html += buildSeat(n, seatData);
-    // 走道
+    for (const n of rowDef.mid)   html += buildSeat(n, seatData, isTop);
     html += `<div class="gap-col"><div class="gap-line"></div></div>`;
-    // 右區
-    for (const n of rowDef.right) html += buildSeat(n, seatData);
+    for (const n of rowDef.right) html += buildSeat(n, seatData, isTop);
     html += `</div>`;
   }
 
@@ -526,7 +536,7 @@ function renderRoom() {
   room.innerHTML = html;
 }
 
-function buildSeat(num, seatData) {
+function buildSeat(num, seatData, isTop = false) {
   // null = 視覺空格（置中用）
   if (num === null) {
     return `<div class="seat spacer"></div>`;
@@ -560,7 +570,7 @@ function buildSeat(num, seatData) {
       tt += `<div class="tt-row" style="color:#fca5a5;margin-top:4px">⚠ 同一 IP 多筆回答</div>`;
   }
 
-  return `<div class="seat ${cls} tt-wrap" data-type="${info.type}" data-num="${num}">
+  return `<div class="seat ${cls} tt-wrap" data-type="${info.type}" data-num="${num}" ${isTop?'data-top="1"':''}>
     ${badge}
     <div class="sn">${num}</div>
     ${entries}
